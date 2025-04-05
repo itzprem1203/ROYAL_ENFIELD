@@ -880,6 +880,12 @@ function sendPartModelValue() {
             // Clear the current options
             parameterNameDropdown.innerHTML = '';
 
+            // Add the default "Select the parameter name" option
+            const defaultOption = document.createElement('option');
+            defaultOption.value = '';
+            defaultOption.textContent = 'Select the parameter name';
+            parameterNameDropdown.appendChild(defaultOption);
+
             // Check if there are parameter names returned
             if (data.parameter_names && data.parameter_names.length > 0) {
                 // Add an initial "Select" option
