@@ -6,50 +6,63 @@ from django.http import JsonResponse
 from django.shortcuts import render
 
 
-from app.models import comport_settings, measure_data, parameter_settings,Master_settings, probe_calibrations
+from app.models import measure_data, parameter_settings,Master_settings,comport_settings
 
 
 
 def master(request):
     if request.method == 'POST':
         try:
+            # Retrieve the data from the request body
             data = json.loads(request.body.decode('utf-8'))
-            print("Raw Data:", data)
-
-            # Extract fields with defaults
-            selected_value = data.get('selectedValue', '')
-            mastering_type = data.get('mastering_type', '')
-            dataArray = data.get('data', [])
+            print("data", data)
             
-           
-           
+            # Extract fields
+            selected_value = data.get('selectedValue')
+                        
+            dataArray = data.get('data', [])
+            print("data array",dataArray)
 
-            if not selected_value:
-                return JsonResponse({'error': 'selectedValue is required'}, status=400)
-
-           
-
-             # Loop through the dataArray and store each row
             for row in dataArray:
+                # Access fields
                 parameterName = row.get('parameterName')
-                probeNumber = row.get('probeNumber', 0)
-                a = row.get('a', 0.0)
-                a1 = row.get('a1', 0.0)
-                b = row.get('b', 0.0)
-                b1 = row.get('b1', None)
-                e = row.get('e', 0.0)
-                d = row.get('d', 0.0)  # Default value to avoid null constraint violation
-                o1 = row.get('o1', 0.0)
-                operatorValues = row.get('operatorValues', '')
-                shiftValues = row.get('shiftValues', '')
-                machineValues = row.get('machineValues', '')
-                dateTime = row.get('dateTime', '')
+                probeNumber = row.get('probeNumber')
+                a = row.get('a')
+                a1 = row.get('a1')
+                b = row.get('b')
+                b1 = row.get('b1')
+                e = row.get('e')
+                d = row.get('d')
+                o1 = row.get('o1')
+                operatorValues = row.get('operatorValues')
+                shiftValues = row.get('shiftValues')
+                machineValues = row.get('machineValues')
+                dateTime = row.get('dateTime')
                 selectedValue = row.get('selectedValue')
-                selectedMastering = row.get('selectedMastering', 0)
+                selectedMastering = row.get('selectedMastering')
 
-                # Convert date string to naive datetime object
+              
+                 # Convert date string to naive datetime object
                 date_obj = datetime.strptime(dateTime, '%d/%m/%Y %I:%M:%S %p')
                 print("date_obj", date_obj)
+
+               
+
+               
+                print("parameterName",parameterName)
+                print("probeNumber",probeNumber)
+                print("a",a)
+                print("a1",a1)
+                print("b",b)
+                print("b1",b1)
+                print("e",e)
+                print("d",d)
+                print("o1",o1)
+                print("operatorValues",operatorValues)
+                print("shiftValues",shiftValues)
+                print("machineValues",machineValues)
+                print("selected values:",selectedValue)
+                print("selectedMastering",selectedMastering)
 
                 # Save each row to the Master_settings model
                 Master_settings.objects.create(
@@ -70,20 +83,17 @@ def master(request):
                     date_time=date_obj,
                 )
 
-            # Conditional filtering based on mastering_type
-            if mastering_type == 'DOUBLE':
-                filtered_data = parameter_settings.objects.filter(
-                    model_id=selected_value,
-                    hide_checkbox=False,
-                    attribute=False
-                ).exclude(
-                    measurement_mode__in=["TIR", "TAP"]
-                ).filter(
-                    analog_zero__isnull=True,
-                    reference_value__isnull=True
-                ).values().order_by('id')
-            elif mastering_type == 'SINGLE':
-                filtered_data = parameter_settings.objects.filter(
+           # Filtering logic based on selected_value and selected_mastering
+            filtered_data = parameter_settings.objects.filter(
+                model_id=selected_value,
+                hide_checkbox=False,
+                attribute=False
+            ).exclude(
+                measurement_mode__in=["TIR", "TAP"]  # Exclude records with "TIR" or "TAP" in measurement_mode
+            ).values().order_by('id')
+
+
+            filtered_data_single = parameter_settings.objects.filter(
                     model_id=selected_value,
                     hide_checkbox=False,
                     attribute=False
@@ -92,22 +102,19 @@ def master(request):
                 ).filter(
                     analog_zero__isnull=False,
                     reference_value__isnull=False
-                ).values().order_by('id')
+                ).values_list('parameter_name', flat=True).order_by('id')
+            print("filtered_data_single",filtered_data_single)
 
-               
-            else:
-                return JsonResponse({'error': 'Invalid mastering_type'}, status=400)
 
-           
-
-            # Fetch data from Master_settings and prepare response
+            # Fetching data from Master_settings
             last_stored_parameter = {
-                item['parameter_name']: item
+                item['parameter_name']: item 
                 for item in Master_settings.objects.filter(
-                    selected_value=selected_value,
+                    selected_value=selected_value, 
                     parameter_name__in=filtered_data.values_list('parameter_name', flat=True)
                 ).values()
             }
+            
 
             # Print e, d, and o1 values
             for param_name, values in last_stored_parameter.items():
@@ -117,7 +124,8 @@ def master(request):
                 o1 = values.get('o1')
                 b = values.get('b')
                 b1 = values.get('b1')
-                print(f"Parameter: {param_name}, id: {id}, e: {e}, d: {d}, o1: {o1}")
+                print(f"Parameter: {param_name}, id:{id}, e: {e}, d: {d}, o1: {o1}, b: {b}, b1: {b1}")
+
 
             response_data = {
                 'message': 'Successfully received the selected values.',
@@ -142,8 +150,8 @@ def master(request):
                 'd_values': [values.get('d') for values in last_stored_parameter.values()],
                 'o1_values': [values.get('o1') for values in last_stored_parameter.values()],
                 'id': [values.get('id') for values in last_stored_parameter.values()],
-                
-               
+               'filtered_data_single': list(filtered_data_single),
+
             }
 
             # Add custom logic to handle low_mv and high_mv fallback
@@ -157,23 +165,19 @@ def master(request):
                     response_data['high_mv'].append(item['reference_value'])
 
             return JsonResponse(response_data)
-
+        
         except json.JSONDecodeError as e:
             return JsonResponse({'error': 'Invalid JSON format in the request body'}, status=400)
         except Exception as e:
             print(f"Unexpected error: {e}")
             return JsonResponse({'error': 'Internal Server Error'}, status=500)
-
         
     elif request.method == 'GET':
         try:
 
             settings_list = list(comport_settings.objects.values(
-            'card', 'com_port', 'baud_rate', 'bytesize', 'stopbits', 'parity'
+                'card', 'com_port', 'baud_rate', 'bytesize', 'stopbits', 'parity'
             ))
-
-            # Dump settings_list to JSON outside the context
-            settings_json = json.dumps(settings_list)
 
             # Your initial queryset for part_model_values
             part_model_values = measure_data.objects.values_list('part_model', flat=True).distinct()
@@ -193,7 +197,7 @@ def master(request):
                 'operator_values': operator_values,
                 'shift_values': shift_values,
                 'machine_values':machine_values,
-                 'settings_json': settings_json,
+                'settings_json': json.dumps(settings_list),
 
             }
 
